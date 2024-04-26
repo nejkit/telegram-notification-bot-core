@@ -17,7 +17,7 @@ type ScheduleProvider struct {
 	mutex            *sync.RWMutex
 }
 
-func (s ScheduleProvider) DropAllSchedules() error {
+func (s *ScheduleProvider) DropAllSchedules() error {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
@@ -30,7 +30,7 @@ func (s ScheduleProvider) DropAllSchedules() error {
 		time.Saturday:  {},
 		time.Sunday:    {},
 	}
-	s.additionalCache = make(map[string][]dao.AdditionalScheduleModel)
+	s.additionalCache = map[string][]dao.AdditionalScheduleModel{}
 
 	data, err := json.Marshal(s.scheduleCache)
 
@@ -59,7 +59,7 @@ func (s ScheduleProvider) DropAllSchedules() error {
 	return nil
 }
 
-func (s ScheduleProvider) CreateNewSchedule(model dao.ScheduleModel) error {
+func (s *ScheduleProvider) CreateNewSchedule(model dao.ScheduleModel) error {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
@@ -89,7 +89,7 @@ func (s ScheduleProvider) CreateNewSchedule(model dao.ScheduleModel) error {
 	return nil
 }
 
-func (s ScheduleProvider) GetScheduleByDate(date time.Time) ([]dao.ScheduleModel, error) {
+func (s *ScheduleProvider) GetScheduleByDate(date time.Time) ([]dao.ScheduleModel, error) {
 
 	var schedules []dao.ScheduleModel
 	curWeekOrder := util.GetCurrentWeekOrder()
@@ -135,7 +135,7 @@ func (s ScheduleProvider) GetScheduleByDate(date time.Time) ([]dao.ScheduleModel
 	return schedules, nil
 }
 
-func (s ScheduleProvider) CreateNewAdditionalSchedule(model dao.AdditionalScheduleModel) error {
+func (s *ScheduleProvider) CreateNewAdditionalSchedule(model dao.AdditionalScheduleModel) error {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
@@ -211,7 +211,7 @@ func NewScheduleProvider() *ScheduleProvider {
 		mutex:            &sync.RWMutex{}}
 }
 
-func (s ScheduleProvider) ValidateScheduleCreation(weekday time.Weekday, order int, weekOrder util.WeekOrder) (bool, error) {
+func (s *ScheduleProvider) ValidateScheduleCreation(weekday time.Weekday, order int, weekOrder util.WeekOrder) (bool, error) {
 	schedule, ok := s.scheduleCache[weekday]
 
 	if !ok {
@@ -240,7 +240,7 @@ func (s ScheduleProvider) ValidateScheduleCreation(weekday time.Weekday, order i
 	return true, nil
 }
 
-func (s ScheduleProvider) ValidateAddScheduleCreation(date time.Time, order int) (bool, error) {
+func (s *ScheduleProvider) ValidateAddScheduleCreation(date time.Time, order int) (bool, error) {
 	schedule, ok := s.additionalCache[date.Format("2006-01-02")]
 
 	if !ok {
@@ -262,6 +262,6 @@ func (s ScheduleProvider) ValidateAddScheduleCreation(date time.Time, order int)
 	return true, nil
 }
 
-func (s ScheduleProvider) GetCommonSchedule() map[time.Weekday][]dao.ScheduleModel {
+func (s *ScheduleProvider) GetCommonSchedule() map[time.Weekday][]dao.ScheduleModel {
 	return s.scheduleCache
 }

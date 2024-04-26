@@ -12,4 +12,5 @@ const (
 	GetScheduleTodayCommand         CommandType = "get_schedule_today"
 	GetScheduleCommonCommand        CommandType = "get_schedule_common"
 	CancelCommand                   CommandType = "cancel"
+	ClearScheduleCommand            CommandType = "clear_schedule"
 )

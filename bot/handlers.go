@@ -98,18 +98,18 @@ func (h *Handler) handleCallback(query tgbotapi.Update) tgbotapi.CallbackConfig 
 
 	switch action.Action {
 	case actions.UserActionInputDate:
-		h.handleInputDate(query, userId)
+		return h.handleInputDate(query, userId)
 	case actions.UserActionChooseCourse:
 
 		switch action.Command {
 		case commands.CreateAdditionalScheduleCommand:
-			h.handleChooseCourseForAdditionalSchedule(query)
+			return h.handleChooseCourseForAdditionalSchedule(query)
 		case commands.CreateScheduleCommand:
-			h.handleChooseCourseForCreateSchedule(query)
+			return h.handleChooseCourseForCreateSchedule(query)
 		case commands.UpdateCourseCommand:
-			h.handleChooseCourseForUpdate(query)
+			return h.handleChooseCourseForUpdate(query)
 		case commands.DeleteCoursesCommand:
-			h.handleChooseCourseForDelete(query)
+			return h.handleChooseCourseForDelete(query)
 		}
 	}
 	return tgbotapi.CallbackConfig{}
@@ -542,6 +542,19 @@ func (h *Handler) handleCancelCommand(userId int, upd tgbotapi.Update) []tgbotap
 	return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Усі дії скасовано")}
 }
 
+func (h *Handler) handleClearScheduleCommand(userId int, upd tgbotapi.Update) []tgbotapi.MessageConfig {
+
+	if authenticated := h.adminAuth(userId); !authenticated {
+		return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Ви не маєте прав, зверніться до власника")}
+	}
+
+	if err := h.schedule.ClearSchedule(); err != nil {
+		return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Під час запиту сталася помилка"+err.Error())}
+	}
+
+	return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Розклад було успішно видалено")}
+}
+
 func (h *Handler) handleCommand(userId int, upd tgbotapi.Update) []tgbotapi.MessageConfig {
 	switch upd.Message.Command() {
 	case string(commands.CreateAdditionalScheduleCommand):
@@ -562,6 +575,9 @@ func (h *Handler) handleCommand(userId int, upd tgbotapi.Update) []tgbotapi.Mess
 		return h.handleCommandCreateSchedule(userId, upd)
 	case string(commands.CancelCommand):
 		return h.handleCancelCommand(userId, upd)
+	case string(commands.ClearScheduleCommand):
+		return h.handleClearScheduleCommand(userId, upd)
+
 	default:
 		return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Невідома команда")}
 	}

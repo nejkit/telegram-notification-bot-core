@@ -16,7 +16,7 @@ func NewActionProvider() *ActionProvider {
 	return &ActionProvider{common: common, mutex: &sync.RWMutex{}}
 }
 
-func (a ActionProvider) StoreData(m map[int]dto.UserActionDto) error {
+func (a *ActionProvider) StoreData(m map[int]dto.UserActionDto) error {
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
 
@@ -29,7 +29,7 @@ func (a ActionProvider) StoreData(m map[int]dto.UserActionDto) error {
 	return a.common.saveAllDataToStorage(data)
 }
 
-func (a ActionProvider) RestoreData() (map[int]dto.UserActionDto, error) {
+func (a *ActionProvider) RestoreData() (map[int]dto.UserActionDto, error) {
 	data, err := a.common.getAllDataFromStorage()
 
 	if err != nil {
