@@ -33,7 +33,7 @@ func NewCourseProvider() *CourseProvider {
 	return &CourseProvider{common: common, cache: cache, mutex: &sync.RWMutex{}}
 }
 
-func (c CourseProvider) CreateNewCourse(model dao.CourseModel) (str string, err error) {
+func (c *CourseProvider) CreateNewCourse(model dao.CourseModel) (str string, err error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 	id := uuid.NewString()
@@ -64,7 +64,7 @@ func (c CourseProvider) CreateNewCourse(model dao.CourseModel) (str string, err 
 	return id, nil
 }
 
-func (c CourseProvider) UpdateCourse(model dao.CourseModel) (err error) {
+func (c *CourseProvider) UpdateCourse(model dao.CourseModel) (err error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -92,7 +92,7 @@ func (c CourseProvider) UpdateCourse(model dao.CourseModel) (err error) {
 	return nil
 }
 
-func (c CourseProvider) ArchiveCourse(id string) (err error) {
+func (c *CourseProvider) ArchiveCourse(id string) (err error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -121,7 +121,7 @@ func (c CourseProvider) ArchiveCourse(id string) (err error) {
 	return nil
 }
 
-func (c CourseProvider) GetCourseByParams(name string) (*dao.CourseModel, error) {
+func (c *CourseProvider) GetCourseByParams(name string) (*dao.CourseModel, error) {
 	for _, val := range c.cache {
 		if val.Name == name {
 			return &val, nil
@@ -131,7 +131,7 @@ func (c CourseProvider) GetCourseByParams(name string) (*dao.CourseModel, error)
 	return nil, exceptions.NotFound
 }
 
-func (c CourseProvider) GetCourses() ([]dao.CourseModel, error) {
+func (c *CourseProvider) GetCourses() ([]dao.CourseModel, error) {
 	var result []dao.CourseModel
 
 	for _, val := range c.cache {
@@ -141,7 +141,7 @@ func (c CourseProvider) GetCourses() ([]dao.CourseModel, error) {
 	return result, nil
 }
 
-func (c CourseProvider) GetCourseById(id string) (*dao.CourseModel, error) {
+func (c *CourseProvider) GetCourseById(id string) (*dao.CourseModel, error) {
 	data, ok := c.cache[id]
 
 	if !ok {
