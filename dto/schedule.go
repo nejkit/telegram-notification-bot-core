@@ -6,10 +6,16 @@ import (
 )
 
 type CreateNewScheduleRequest struct {
-	CourseId  string
-	Weekday   time.Weekday
-	WeekOrder util.WeekOrder
-	Order     int
+	CourseId   string
+	Weekday    time.Weekday
+	WeekOrder  util.WeekOrder
+	Order      int
+	IsOptional bool
+}
+
+type LinkOptionalCourseToUserRequest struct {
+	UserId   int
+	CourseId string
 }
 
 type CreateNewAdditionalScheduleRequest struct {

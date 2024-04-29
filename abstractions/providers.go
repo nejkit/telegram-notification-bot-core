@@ -24,6 +24,7 @@ type IScheduleProvider interface {
 	ValidateScheduleCreation(weekday time.Weekday, order int, weekOrder util.WeekOrder) (bool, error)
 	DropAllSchedules() error
 	GetCommonSchedule() map[time.Weekday][]dao.ScheduleModel
+	LinkCourseToUser(userId int, courseId string) error
 }
 
 type IUserActionProvider interface {

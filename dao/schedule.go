@@ -6,9 +6,15 @@ import (
 )
 
 type ScheduleModel struct {
-	Id        string
-	Weekday   time.Weekday
-	WeekOrder util.WeekOrder
-	CourseId  string
-	Order     int
+	Id              string
+	Weekday         time.Weekday
+	WeekOrder       util.WeekOrder
+	CourseId        string
+	Order           int
+	IsOptional      bool
+	OptCourseParams OptionalCourseSettings
+}
+
+type OptionalCourseSettings struct {
+	UserIdToCourseId map[int]string
 }

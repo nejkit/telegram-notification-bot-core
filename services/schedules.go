@@ -7,6 +7,7 @@ import (
 	"telegram-notification-bot-core/configuration"
 	"telegram-notification-bot-core/dao"
 	"telegram-notification-bot-core/dto"
+	"telegram-notification-bot-core/exceptions"
 	"telegram-notification-bot-core/util"
 	"time"
 )
@@ -38,12 +39,20 @@ func (s ScheduleService) CreateNewSchedule(request dto.CreateNewScheduleRequest)
 		return err
 	}
 
-	return s.provider.CreateNewSchedule(dao.ScheduleModel{
-		Weekday:   request.Weekday,
-		WeekOrder: request.WeekOrder,
-		CourseId:  request.CourseId,
-		Order:     request.Order,
-	})
+	daoModel := dao.ScheduleModel{
+		Weekday:    request.Weekday,
+		WeekOrder:  request.WeekOrder,
+		Order:      request.Order,
+		IsOptional: request.IsOptional,
+	}
+
+	if request.IsOptional {
+		daoModel.OptCourseParams = dao.OptionalCourseSettings{UserIdToCourseId: map[int]string{}}
+	} else {
+		daoModel.CourseId = request.CourseId
+	}
+
+	return s.provider.CreateNewSchedule(daoModel)
 }
 
 func (s ScheduleService) ClearSchedule() error {
@@ -80,7 +89,7 @@ func (s ScheduleService) InsertAdditionalSchedule(request dto.CreateNewAdditiona
 	return s.provider.CreateNewAdditionalSchedule(daoModel)
 }
 
-func (s ScheduleService) GetCurrentSchedule() (*dto.GetScheduleResponse, error) {
+func (s ScheduleService) GetCurrentSchedule(userId int) (*dto.GetScheduleResponse, error) {
 	currentTime := util.GetMidnightTime()
 	schedule, err := s.provider.GetScheduleByDate(currentTime)
 
@@ -88,39 +97,12 @@ func (s ScheduleService) GetCurrentSchedule() (*dto.GetScheduleResponse, error) 
 		return nil, err
 	}
 
-	var schedules []dto.ScheduleDto
+	result := s.enrichScheduleInfoByUserId(schedule, userId)
 
-	for _, val := range schedule {
-		courseInfo, err := s.courseProvider.GetCourseById(val.CourseId)
-
-		if err != nil {
-			continue
-		}
-		schedules = append(schedules, dto.ScheduleDto{
-			CourseInfo: dto.CourseDto{
-				Name:           courseInfo.Name,
-				Id:             courseInfo.Id,
-				TeacherName:    courseInfo.TeacherName,
-				TeacherContact: courseInfo.TeacherContact,
-				MeetLink:       courseInfo.MeetLink,
-			},
-			Order:     val.Order,
-			WeekOrder: val.WeekOrder,
-		})
-	}
-
-	sort.Slice(schedules, func(i, j int) bool {
-		return schedules[i].Order < schedules[j].Order
-	})
-
-	return &dto.GetScheduleResponse{
-		CurrentDate:      currentTime,
-		CurrentWeekOrder: util.GetCurrentWeekOrder(),
-		Schedules:        schedules,
-	}, err
+	return &result, nil
 }
 
-func (s ScheduleService) GetCommonSchedule() *dto.GetCommonScheduleResponse {
+func (s ScheduleService) GetCommonSchedule(userId int) (*dto.GetCommonScheduleResponse, error) {
 	result := s.provider.GetCommonSchedule()
 
 	resultDto := dto.GetCommonScheduleResponse{
@@ -141,16 +123,28 @@ func (s ScheduleService) GetCommonSchedule() *dto.GetCommonScheduleResponse {
 				values = []dto.ScheduleDto{}
 			}
 
-			courseDto, _ := s.courseProvider.GetCourseById(v.CourseId)
+			var courseInfo *dao.CourseModel
+
+			if v.IsOptional {
+				courseId, exists := v.OptCourseParams.UserIdToCourseId[userId]
+
+				if !exists {
+					return nil, exceptions.OptionalCourseNotSelected
+				}
+
+				courseInfo, _ = s.courseProvider.GetCourseById(courseId)
+			} else {
+				courseInfo, _ = s.courseProvider.GetCourseById(v.CourseId)
+			}
 
 			orderToSchedules[v.Order] = append(values,
 				dto.ScheduleDto{
 					CourseInfo: dto.CourseDto{
-						Name:           courseDto.Name,
-						Id:             courseDto.Id,
-						TeacherName:    courseDto.TeacherName,
-						TeacherContact: courseDto.TeacherContact,
-						MeetLink:       courseDto.MeetLink,
+						Name:           courseInfo.Name,
+						Id:             courseInfo.Id,
+						TeacherName:    courseInfo.TeacherName,
+						TeacherContact: courseInfo.TeacherContact,
+						MeetLink:       courseInfo.MeetLink,
 					},
 					Order:     v.Order,
 					WeekOrder: v.WeekOrder,
@@ -161,5 +155,102 @@ func (s ScheduleService) GetCommonSchedule() *dto.GetCommonScheduleResponse {
 		resultDto.Schedules[key] = dto.CommonScheduleDto{OrderToSchedules: orderToSchedules}
 	}
 
-	return &resultDto
+	return &resultDto, nil
+}
+
+func (s ScheduleService) LinkOptionalCourseToUser(request dto.LinkOptionalCourseToUserRequest) error {
+	return s.provider.LinkCourseToUser(request.UserId, request.CourseId)
+}
+
+func (s ScheduleService) PrepareSchedulesListForNotify(userIds []int) (map[int][]dto.ScheduleDto, error) {
+	currentTime := util.GetMidnightTime()
+	schedule, err := s.provider.GetScheduleByDate(currentTime)
+
+	if err != nil {
+		return nil, err
+	}
+
+	resultMap := map[int][]dto.ScheduleDto{}
+
+	for _, userId := range userIds {
+
+		resultMap[userId] = s.enrichScheduleInfoByUserId(schedule, userId).Schedules
+	}
+
+	return resultMap, nil
+}
+
+func (s ScheduleService) enrichScheduleInfoByUserId(schedule []dao.ScheduleModel, userId int) dto.GetScheduleResponse {
+
+	var schedules []dto.ScheduleDto
+
+	for _, val := range schedule {
+
+		var courseInfo *dao.CourseModel
+
+		if !val.IsOptional {
+			courseInfo, _ = s.courseProvider.GetCourseById(val.CourseId)
+		} else {
+			courseId, ex := val.OptCourseParams.UserIdToCourseId[userId]
+			if !ex {
+				courseInfo = &dao.CourseModel{
+					Id:             "",
+					Name:           "Не обрано опціональний курс",
+					TeacherName:    "",
+					TeacherContact: "",
+					MeetLink:       "",
+				}
+			} else {
+				courseInfo, _ = s.courseProvider.GetCourseById(courseId)
+			}
+		}
+
+		scheduleDto := dto.ScheduleDto{
+			Order:     val.Order,
+			WeekOrder: val.WeekOrder,
+			CourseInfo: dto.CourseDto{
+				Name:           courseInfo.Name,
+				Id:             courseInfo.Id,
+				TeacherName:    courseInfo.TeacherName,
+				TeacherContact: courseInfo.TeacherContact,
+				MeetLink:       courseInfo.MeetLink,
+			},
+		}
+
+		schedules = append(schedules, scheduleDto)
+	}
+
+	sort.Slice(schedules, func(i, j int) bool {
+		return schedules[i].Order < schedules[j].Order
+	})
+
+	return dto.GetScheduleResponse{
+		CurrentDate:      util.GetMidnightTime(),
+		CurrentWeekOrder: util.GetCurrentWeekOrder(),
+		Schedules:        schedules,
+	}
+}
+
+func (s ScheduleService) GetSchedulesIdsWithOptionalCourse() ([]string, error) {
+	schedules := s.provider.GetCommonSchedule()
+
+	var result []string
+
+	for _, schedule := range schedules {
+		for _, v := range schedule {
+			if v.IsOptional {
+				result = append(result, v.Id)
+			}
+		}
+	}
+
+	if result == nil {
+		return nil, exceptions.NotFound
+	}
+
+	if result != nil && len(result) == 0 {
+		return nil, exceptions.NotFound
+	}
+
+	return result, nil
 }

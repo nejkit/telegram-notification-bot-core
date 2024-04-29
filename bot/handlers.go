@@ -377,7 +377,7 @@ func (h *Handler) handleCommandCreateAdditionalSchedule(userId int, upd tgbotapi
 }
 
 func (h *Handler) handleGetCommonSchedules(upd tgbotapi.Update) []tgbotapi.MessageConfig {
-	schedules := h.schedule.GetCommonSchedule()
+	schedules := h.schedule.GetCommonSchedule(upd.Message.From.ID)
 
 	var res []tgbotapi.MessageConfig
 	text := "Розклад"
@@ -411,7 +411,7 @@ func (h *Handler) handleGetCommonSchedules(upd tgbotapi.Update) []tgbotapi.Messa
 }
 
 func (h *Handler) handleGetScheduleAtToday(upd tgbotapi.Update) []tgbotapi.MessageConfig {
-	schedules, _ := h.schedule.GetCurrentSchedule()
+	schedules, _ := h.schedule.GetCurrentSchedule(upd.Message.From.ID)
 	var res []tgbotapi.MessageConfig
 	text := "Розклад. Дата: " + schedules.CurrentDate.Format("2006-01-02") + " Тиждень: " + util.ConvertToHumanReadableWeekOrder(schedules.CurrentWeekOrder)
 	res = append(res, tgbotapi.NewMessage(upd.Message.Chat.ID, text))

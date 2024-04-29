@@ -6,4 +6,5 @@ type CourseModel struct {
 	TeacherName    string
 	TeacherContact string
 	MeetLink       string
+	IsOptional     bool
 }

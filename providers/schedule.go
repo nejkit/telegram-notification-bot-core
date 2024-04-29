@@ -271,3 +271,25 @@ func (s *ScheduleProvider) ValidateAddScheduleCreation(date time.Time, order int
 func (s *ScheduleProvider) GetCommonSchedule() map[time.Weekday][]dao.ScheduleModel {
 	return s.scheduleCache
 }
+
+func (s *ScheduleProvider) LinkCourseToUser(userId int, courseId string) error {
+
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	for _, values := range s.scheduleCache {
+		for _, value := range values {
+			if value.IsOptional {
+				value.OptCourseParams.UserIdToCourseId[userId] = courseId
+			}
+		}
+	}
+
+	data, err := json.Marshal(s.scheduleCache)
+
+	if err != nil {
+		return err
+	}
+
+	return s.scheduleCommon.saveAllDataToStorage(data)
+}

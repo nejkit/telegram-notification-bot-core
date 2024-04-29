@@ -5,6 +5,7 @@ type CreateNewCourseRequest struct {
 	TeacherName    string
 	TeacherContact string
 	MeetLink       string
+	IsOptional     bool
 }
 
 type UpdateCourseInfoRequest struct {
@@ -13,6 +14,7 @@ type UpdateCourseInfoRequest struct {
 	TeacherName    string
 	TeacherContact string
 	MeetLink       string
+	IsOptional     bool
 }
 
 type ArchiveCourseRequest struct {
