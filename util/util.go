@@ -19,9 +19,9 @@ func GetCurrentWeekOrder() WeekOrder {
 	actualWeekCount := actualTime.Day() / 7
 
 	if actualWeekCount%2 == 0 {
-		return 2
+		return 1
 	}
-	return 1
+	return 2
 }
 
 func ConvertFromHumanReadableOrderWeek(data string) (WeekOrder, error) {
@@ -65,9 +65,9 @@ func ConvertFromHumanReadableWeek(data string) (time.Weekday, error) {
 func ConvertToHumanReadableWeekOrder(weekOrder WeekOrder) string {
 	switch weekOrder {
 	case WeekOrderDown:
-		return "Верхній"
-	case WeekOrderUpper:
 		return "Нижній"
+	case WeekOrderUpper:
+		return "Верхній"
 	case WeekOrderNone:
 		return "Статичний"
 	default:

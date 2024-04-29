@@ -94,13 +94,19 @@ func (s *ScheduleProvider) GetScheduleByDate(date time.Time) ([]dao.ScheduleMode
 	var schedules []dao.ScheduleModel
 	curWeekOrder := util.GetCurrentWeekOrder()
 	curWeekday := date.Weekday()
-	additionals := s.additionalCache[date.Format("2006-01-02")]
+	additional := s.additionalCache[date.Format("2006-01-02")]
 	excludedOrders := map[int]struct{}{}
 
-	if additionals != nil && len(additionals) > 0 {
+	if additional != nil && len(additional) > 0 {
 
-		for _, val := range additionals {
+		for _, val := range additional {
 			excludedOrders[val.Order] = struct{}{}
+
+			// we exclude this schedule order, by not add info about additional
+			if val.IsEmpty {
+				continue
+			}
+
 			schedules = append(schedules, dao.ScheduleModel{
 				Id:        val.Id,
 				Weekday:   val.AdditionalTime.Weekday(),

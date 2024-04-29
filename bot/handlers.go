@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/dipsycat/calendar-telegram-go"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/google/uuid"
 	"strconv"
 	"telegram-notification-bot-core/abstractions"
 	"telegram-notification-bot-core/actions"
@@ -30,6 +31,10 @@ type Handler struct {
 
 	api *Api
 }
+
+var (
+	EmptyCourseCallbackDataId = uuid.NewString()
+)
 
 func NewHandler(
 	course abstractions.ICourseService,
@@ -243,11 +248,20 @@ func (h *Handler) handleInputDate(query tgbotapi.Update, userId int) tgbotapi.Ca
 }
 
 func (h *Handler) handleChooseCourseForAdditionalSchedule(query tgbotapi.Update) tgbotapi.CallbackConfig {
+
+	callBackData := query.CallbackQuery.Data
+
 	req := dto.CreateNewAdditionalScheduleRequest{
-		CreateNewScheduleRequest: dto.CreateNewScheduleRequest{
-			CourseId: query.CallbackQuery.Data,
-		},
+		CreateNewScheduleRequest: dto.CreateNewScheduleRequest{},
 	}
+
+	if callBackData == EmptyCourseCallbackDataId {
+		req.IsEmpty = true
+	} else {
+		req.IsEmpty = false
+		req.CourseId = callBackData
+	}
+
 	h.createAddScheduleRequests[query.CallbackQuery.From.ID] = req
 	h.actions.SaveUserCurrentState(query.CallbackQuery.From.ID, dto.UserActionDto{
 		Command: commands.CreateAdditionalScheduleCommand,
@@ -354,6 +368,9 @@ func (h *Handler) handleCommandCreateAdditionalSchedule(userId int, upd tgbotapi
 		keys.InlineKeyboard = append(keys.InlineKeyboard,
 			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(course.Name, course.Id)))
 	}
+
+	keys.InlineKeyboard = append(keys.InlineKeyboard,
+		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Пари не буде", EmptyCourseCallbackDataId)))
 
 	msg.ReplyMarkup = keys
 	return []tgbotapi.MessageConfig{msg}

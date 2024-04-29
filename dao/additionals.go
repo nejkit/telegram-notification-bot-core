@@ -7,4 +7,5 @@ type AdditionalScheduleModel struct {
 	AdditionalTime time.Time
 	Order          int
 	CourseId       string
+	IsEmpty        bool
 }

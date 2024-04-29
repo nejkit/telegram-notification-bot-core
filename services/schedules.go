@@ -67,11 +67,17 @@ func (s ScheduleService) InsertAdditionalSchedule(request dto.CreateNewAdditiona
 		return err
 	}
 
-	return s.provider.CreateNewAdditionalSchedule(dao.AdditionalScheduleModel{
+	daoModel := dao.AdditionalScheduleModel{
 		AdditionalTime: request.Date,
-		CourseId:       request.CourseId,
 		Order:          request.Order,
-	})
+		IsEmpty:        request.IsEmpty,
+	}
+
+	if !request.IsEmpty {
+		daoModel.CourseId = request.CourseId
+	}
+
+	return s.provider.CreateNewAdditionalSchedule(daoModel)
 }
 
 func (s ScheduleService) GetCurrentSchedule() (*dto.GetScheduleResponse, error) {

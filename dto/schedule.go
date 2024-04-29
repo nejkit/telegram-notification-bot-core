@@ -14,7 +14,8 @@ type CreateNewScheduleRequest struct {
 
 type CreateNewAdditionalScheduleRequest struct {
 	CreateNewScheduleRequest
-	Date time.Time
+	Date    time.Time
+	IsEmpty bool
 }
 
 type GetScheduleResponse struct {
