@@ -129,10 +129,17 @@ func (s ScheduleService) GetCommonSchedule(userId int) (*dto.GetCommonScheduleRe
 				courseId, exists := v.OptCourseParams.UserIdToCourseId[userId]
 
 				if !exists {
-					return nil, exceptions.OptionalCourseNotSelected
+					courseInfo = &dao.CourseModel{
+						Id:             "",
+						Name:           "Не вибрано опціональний курс",
+						TeacherName:    "",
+						TeacherContact: "",
+						MeetLink:       "",
+					}
+				} else {
+					courseInfo, _ = s.courseProvider.GetCourseById(courseId)
 				}
 
-				courseInfo, _ = s.courseProvider.GetCourseById(courseId)
 			} else {
 				courseInfo, _ = s.courseProvider.GetCourseById(v.CourseId)
 			}

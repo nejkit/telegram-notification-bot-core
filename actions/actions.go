@@ -13,4 +13,5 @@ const (
 	UserActionInputWeekOrder      UserAction = 8
 	UserActionInputOrder          UserAction = 9
 	UserActionInputDate           UserAction = 10
+	UserActionSelectOptionality   UserAction = 11
 )

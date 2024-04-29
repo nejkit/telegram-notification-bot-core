@@ -123,6 +123,7 @@ func (c CourseService) GetCourseById(id string) (*dto.CourseDto, error) {
 		TeacherName:    course.TeacherName,
 		TeacherContact: course.TeacherContact,
 		MeetLink:       course.MeetLink,
+		IsOptional:     course.IsOptional,
 	}, nil
 
 }
