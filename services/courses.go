@@ -25,6 +25,7 @@ func (c CourseService) CreateNewCourse(request dto.CreateNewCourseRequest) (stri
 			TeacherName:    request.TeacherName,
 			TeacherContact: request.TeacherContact,
 			MeetLink:       request.MeetLink,
+			IsOptional:     request.IsOptional,
 		})
 
 		if err != nil {
@@ -48,11 +49,40 @@ func (c CourseService) UpdateCourse(request dto.UpdateCourseInfoRequest) error {
 		TeacherName:    request.TeacherName,
 		TeacherContact: request.TeacherContact,
 		MeetLink:       request.MeetLink,
+		IsOptional:     request.IsOptional,
 	})
 }
 
 func (c CourseService) DeleteCourse(request dto.ArchiveCourseRequest) error {
 	return c.provider.ArchiveCourse(request.CourseId)
+}
+
+func (c CourseService) GetOptionalCourses() (*dto.GetCoursesResponse, error) {
+	courses, err := c.provider.GetCourses()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var coursesDto []dto.CourseDto
+
+	for _, course := range courses {
+		if !course.IsOptional {
+			continue
+		}
+
+		coursesDto = append(coursesDto, dto.CourseDto{
+			Name:           course.Name,
+			Id:             course.Id,
+			TeacherName:    course.TeacherName,
+			TeacherContact: course.TeacherContact,
+			MeetLink:       course.MeetLink,
+		})
+	}
+
+	return &dto.GetCoursesResponse{
+		Courses: coursesDto,
+	}, nil
 }
 
 func (c CourseService) GetCourses() (*dto.GetCoursesResponse, error) {
@@ -93,6 +123,7 @@ func (c CourseService) GetCourseById(id string) (*dto.CourseDto, error) {
 		TeacherName:    course.TeacherName,
 		TeacherContact: course.TeacherContact,
 		MeetLink:       course.MeetLink,
+		IsOptional:     course.IsOptional,
 	}, nil
 
 }

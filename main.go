@@ -46,7 +46,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	go backgroundService.Run(childCtx, api.BatchSend)
+	go backgroundService.Run(childCtx, api.SendNotification)
 	handler := bot.NewHandler(coursesService, actionsService, scheduleService, chatProvider, config, api)
 	go api.StartServe()
 	go handler.Run(childCtx)

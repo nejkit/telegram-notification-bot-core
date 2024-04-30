@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"errors"
 	"telegram-notification-bot-core/abstractions"
 	"telegram-notification-bot-core/configuration"
 	"telegram-notification-bot-core/dto"
@@ -10,74 +9,94 @@ import (
 	"time"
 )
 
-type HandleFunc func(scheduleDto dto.ScheduleDto, startTime time.Time, recipients []int64)
+type HandleFunc func(scheduleDto dto.ScheduleDto, startTime time.Time, recipient int64)
 
 type BackgroundService struct {
 	scheduleService abstractions.IScheduleService
 	chatProvider    abstractions.IChatProvider
 	cfg             configuration.Configuration
-	handlers        map[int]<-chan struct{}
+	handlers        map[int]map[int]<-chan struct{}
 }
 
 func NewBackgroundService(scheduleService abstractions.IScheduleService, chatProvider abstractions.IChatProvider, cfg configuration.Configuration) *BackgroundService {
-	return &BackgroundService{scheduleService: scheduleService, chatProvider: chatProvider, cfg: cfg, handlers: map[int]<-chan struct{}{}}
+	return &BackgroundService{scheduleService: scheduleService, chatProvider: chatProvider, cfg: cfg, handlers: map[int]map[int]<-chan struct{}{}}
 }
 
 func (b BackgroundService) Run(ctx context.Context, handleFunc HandleFunc) {
 	ticker := time.NewTicker(b.cfg.ScheduleSettings.ScheduleRefreshInterval)
+	accounts := b.cfg.Security.AllowedAccountIds
+	schedules, err := b.scheduleService.PrepareSchedulesListForNotify(accounts)
+
+	if err == nil {
+		for _, accountId := range accounts {
+			b.handlers[accountId] = map[int]<-chan struct{}{}
+			b.doCycle(ctx, schedules, accountId, handleFunc)
+		}
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			accounts = b.cfg.Security.AllowedAccountIds
 
-			schedules, err := b.collectDataForCreationHandlers()
+			schedules, err = b.scheduleService.PrepareSchedulesListForNotify(accounts)
 
 			if err != nil {
 				continue
 			}
 
-			for _, schedule := range schedules {
-				_, ok := b.handlers[schedule.Order]
+			for _, accountId := range accounts {
+				_, exists := b.handlers[accountId]
 
-				if ok {
-					continue
+				if !exists {
+					b.handlers[accountId] = map[int]<-chan struct{}{}
 				}
 
-				b.handlers[schedule.Order] = b.initHandler(ctx, handleFunc, schedule)
-
-				schedule1 := schedule
-				go func() {
-
-					for {
-						select {
-						case <-b.handlers[schedule1.Order]:
-							delete(b.handlers, schedule1.Order)
-						default:
-							time.Sleep(time.Second)
-						}
-
-					}
-
-				}()
+				b.doCycle(ctx, schedules, accountId, handleFunc)
 			}
 		}
 	}
 }
 
-func (b BackgroundService) collectDataForCreationHandlers() ([]dto.ScheduleDto, error) {
-	schedules, err := b.scheduleService.GetCurrentSchedule()
+func (b BackgroundService) doCycle(
+	ctx context.Context,
+	schedules map[int][]dto.ScheduleDto,
+	accountId int,
+	handleFunc HandleFunc) {
+	filteredNotifications := b.filterOverdueNotifications(schedules[accountId])
+
+	for _, notification := range filteredNotifications {
+
+		_, exists := b.handlers[accountId][notification.Order]
+
+		if exists {
+			continue
+		}
+
+		b.handlers[accountId][notification.Order] = b.initHandler(ctx, handleFunc, notification, accountId)
+
+		notification := notification
+		go func() {
+			for {
+				select {
+				case <-b.handlers[accountId][notification.Order]:
+					delete(b.handlers[accountId], notification.Order)
+				default:
+					time.Sleep(time.Second)
+				}
+			}
+		}()
+	}
+}
+
+func (b BackgroundService) filterOverdueNotifications(scheduleListDto []dto.ScheduleDto) []dto.ScheduleDto {
+	actualTime := time.Now()
 
 	var filteredSchedules []dto.ScheduleDto
 
-	if err != nil {
-		return nil, err
-	}
-
-	actualTime := time.Now()
-
-	for _, schedule := range schedules.Schedules {
+	for _, schedule := range scheduleListDto {
 		startTime := util.GetMidnightTime().Add(b.cfg.ScheduleSettings.TimeSlotsConfiguration[schedule.Order].StartTime)
 
 		if actualTime.After(startTime) {
@@ -87,18 +106,15 @@ func (b BackgroundService) collectDataForCreationHandlers() ([]dto.ScheduleDto, 
 		filteredSchedules = append(filteredSchedules, schedule)
 	}
 
-	if len(filteredSchedules) == 0 {
-		return nil, errors.New("NotFound")
-	}
-
-	return filteredSchedules, nil
+	return filteredSchedules
 }
 
 func (b BackgroundService) initHandler(
 	ctx context.Context,
 	handleFunc HandleFunc,
-	args dto.ScheduleDto) chan struct{} {
-	ticker := time.NewTicker(time.Second * 30)
+	args dto.ScheduleDto,
+	accountId int) chan struct{} {
+	ticker := time.NewTicker(time.Second)
 
 	startTime := util.GetMidnightTime().Add(b.cfg.ScheduleSettings.TimeSlotsConfiguration[args.Order].StartTime)
 
@@ -108,16 +124,10 @@ func (b BackgroundService) initHandler(
 
 	go func() {
 
-		var recipients []int64
+		chatId, err := b.chatProvider.GetChatByUserId(accountId)
 
-		for _, accId := range b.cfg.Security.AllowedAccountIds {
-			chatId, err := b.chatProvider.GetChatByUserId(accId)
-
-			if err != nil {
-				continue
-			}
-
-			recipients = append(recipients, chatId)
+		if err != nil {
+			return
 		}
 
 		for {
@@ -130,14 +140,14 @@ func (b BackgroundService) initHandler(
 
 				for _, rem := range reminderSlice {
 
-					if int(startTime.Sub(actualTime).Minutes()) < rem {
+					if startTime.Minute()-actualTime.Minute() < rem {
 						reminderSlice = reminderSlice[1:]
 					}
 
-					if int(startTime.Sub(actualTime).Minutes()) == rem {
+					if startTime.Minute()-actualTime.Minute() == rem {
 						reminderSlice = reminderSlice[1:]
 
-						handleFunc(args, startTime, recipients)
+						handleFunc(args, startTime, chatId)
 					}
 				}
 			default:
@@ -145,6 +155,7 @@ func (b BackgroundService) initHandler(
 					cancelChan <- struct{}{}
 					return
 				}
+				time.Sleep(time.Millisecond)
 			}
 		}
 	}()

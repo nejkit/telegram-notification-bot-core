@@ -7,6 +7,7 @@ type ICourseService interface {
 	UpdateCourse(request dto.UpdateCourseInfoRequest) error
 	DeleteCourse(request dto.ArchiveCourseRequest) error
 	GetCourses() (*dto.GetCoursesResponse, error)
+	GetOptionalCourses() (*dto.GetCoursesResponse, error)
 	GetCourseById(id string) (*dto.CourseDto, error)
 }
 
@@ -14,8 +15,10 @@ type IScheduleService interface {
 	CreateNewSchedule(request dto.CreateNewScheduleRequest) error
 	ClearSchedule() error
 	InsertAdditionalSchedule(request dto.CreateNewAdditionalScheduleRequest) error
-	GetCurrentSchedule() (*dto.GetScheduleResponse, error)
-	GetCommonSchedule() *dto.GetCommonScheduleResponse
+	GetCurrentSchedule(userId int) (*dto.GetScheduleResponse, error)
+	GetCommonSchedule(userId int) (*dto.GetCommonScheduleResponse, error)
+	PrepareSchedulesListForNotify(userIds []int) (map[int][]dto.ScheduleDto, error)
+	LinkOptionalCourseToUser(request dto.LinkOptionalCourseToUserRequest) error
 }
 
 type IBackgroundService interface {

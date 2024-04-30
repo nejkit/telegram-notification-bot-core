@@ -23,17 +23,19 @@ type Handler struct {
 	chats    abstractions.IChatProvider
 	cfg      configuration.Configuration
 
-	createCourseRequests      map[int]dto.CreateNewCourseRequest
-	createScheduleRequests    map[int]dto.CreateNewScheduleRequest
-	createAddScheduleRequests map[int]dto.CreateNewAdditionalScheduleRequest
-	updateCourseRequests      map[int]dto.UpdateCourseInfoRequest
-	calendarPosition          map[int]dto.CalendarPositionDto
+	createCourseRequests       map[int]dto.CreateNewCourseRequest
+	createScheduleRequests     map[int]dto.CreateNewScheduleRequest
+	createAddScheduleRequests  map[int]dto.CreateNewAdditionalScheduleRequest
+	updateCourseRequests       map[int]dto.UpdateCourseInfoRequest
+	linkOptionalCourseRequests map[int]dto.LinkOptionalCourseToUserRequest
+	calendarPosition           map[int]dto.CalendarPositionDto
 
 	api *Api
 }
 
 var (
 	EmptyCourseCallbackDataId = uuid.NewString()
+	OptionalCourseCallbackId  = uuid.NewString()
 )
 
 func NewHandler(
@@ -44,17 +46,18 @@ func NewHandler(
 	cfg configuration.Configuration, api *Api) *Handler {
 
 	return &Handler{
-		actions:                   actions,
-		cfg:                       cfg,
-		course:                    course,
-		schedule:                  schedules,
-		chats:                     chats,
-		api:                       api,
-		createCourseRequests:      map[int]dto.CreateNewCourseRequest{},
-		updateCourseRequests:      map[int]dto.UpdateCourseInfoRequest{},
-		calendarPosition:          map[int]dto.CalendarPositionDto{},
-		createScheduleRequests:    map[int]dto.CreateNewScheduleRequest{},
-		createAddScheduleRequests: map[int]dto.CreateNewAdditionalScheduleRequest{},
+		actions:                    actions,
+		cfg:                        cfg,
+		course:                     course,
+		schedule:                   schedules,
+		chats:                      chats,
+		api:                        api,
+		createCourseRequests:       map[int]dto.CreateNewCourseRequest{},
+		updateCourseRequests:       map[int]dto.UpdateCourseInfoRequest{},
+		calendarPosition:           map[int]dto.CalendarPositionDto{},
+		createScheduleRequests:     map[int]dto.CreateNewScheduleRequest{},
+		createAddScheduleRequests:  map[int]dto.CreateNewAdditionalScheduleRequest{},
+		linkOptionalCourseRequests: map[int]dto.LinkOptionalCourseToUserRequest{},
 	}
 
 }
@@ -115,6 +118,8 @@ func (h *Handler) handleCallback(query tgbotapi.Update) tgbotapi.CallbackConfig 
 			return h.handleChooseCourseForUpdate(query)
 		case commands.DeleteCoursesCommand:
 			return h.handleChooseCourseForDelete(query)
+		case commands.LinkOptionalCourseCommand:
+			return h.handleChooseCourseForLink(query)
 		}
 	}
 	return tgbotapi.CallbackConfig{}
@@ -275,9 +280,13 @@ func (h *Handler) handleChooseCourseForAdditionalSchedule(query tgbotapi.Update)
 }
 
 func (h *Handler) handleChooseCourseForCreateSchedule(query tgbotapi.Update) tgbotapi.CallbackConfig {
-	req := dto.CreateNewScheduleRequest{
-		CourseId: query.CallbackQuery.Data,
+	req := dto.CreateNewScheduleRequest{}
+	req.IsOptional = true
+	if query.CallbackQuery.Data != OptionalCourseCallbackId {
+		req.CourseId = query.CallbackQuery.Data
+		req.IsOptional = false
 	}
+
 	h.createScheduleRequests[query.CallbackQuery.From.ID] = req
 	h.actions.SaveUserCurrentState(query.CallbackQuery.From.ID, dto.UserActionDto{
 		Command: commands.CreateScheduleCommand,
@@ -299,6 +308,7 @@ func (h *Handler) handleChooseCourseForUpdate(query tgbotapi.Update) tgbotapi.Ca
 	req.MeetLink = info.MeetLink
 	req.TeacherName = info.TeacherName
 	req.TeacherContact = info.TeacherContact
+	req.IsOptional = info.IsOptional
 
 	h.updateCourseRequests[query.CallbackQuery.From.ID] = req
 
@@ -326,6 +336,30 @@ func (h *Handler) handleChooseCourseForDelete(query tgbotapi.Update) tgbotapi.Ca
 		CallbackQueryID: query.CallbackQuery.ID,
 		Text:            "Курс видалено",
 	}
+}
+
+func (h *Handler) handleChooseCourseForLink(query tgbotapi.Update) tgbotapi.CallbackConfig {
+	h.actions.SaveUserCurrentState(query.CallbackQuery.From.ID, dto.UserActionDto{
+		Action: actions.UserActionNone,
+	})
+
+	req := h.linkOptionalCourseRequests[query.CallbackQuery.From.ID]
+
+	req.CourseId = query.CallbackQuery.Data
+	delete(h.linkOptionalCourseRequests, query.CallbackQuery.From.ID)
+
+	if err := h.schedule.LinkOptionalCourseToUser(req); err != nil {
+		return tgbotapi.CallbackConfig{
+			CallbackQueryID: query.CallbackQuery.ID,
+			Text:            "Помилка при зв'язці: " + err.Error(),
+		}
+	}
+
+	return tgbotapi.CallbackConfig{
+		CallbackQueryID: query.CallbackQuery.ID,
+		Text:            "Курс зв'язано",
+	}
+
 }
 
 func (h *Handler) baseAuth(userId int) bool {
@@ -377,7 +411,7 @@ func (h *Handler) handleCommandCreateAdditionalSchedule(userId int, upd tgbotapi
 }
 
 func (h *Handler) handleGetCommonSchedules(upd tgbotapi.Update) []tgbotapi.MessageConfig {
-	schedules := h.schedule.GetCommonSchedule()
+	schedules, _ := h.schedule.GetCommonSchedule(upd.Message.From.ID)
 
 	var res []tgbotapi.MessageConfig
 	text := "Розклад"
@@ -411,7 +445,7 @@ func (h *Handler) handleGetCommonSchedules(upd tgbotapi.Update) []tgbotapi.Messa
 }
 
 func (h *Handler) handleGetScheduleAtToday(upd tgbotapi.Update) []tgbotapi.MessageConfig {
-	schedules, _ := h.schedule.GetCurrentSchedule()
+	schedules, _ := h.schedule.GetCurrentSchedule(upd.Message.From.ID)
 	var res []tgbotapi.MessageConfig
 	text := "Розклад. Дата: " + schedules.CurrentDate.Format("2006-01-02") + " Тиждень: " + util.ConvertToHumanReadableWeekOrder(schedules.CurrentWeekOrder)
 	res = append(res, tgbotapi.NewMessage(upd.Message.Chat.ID, text))
@@ -540,6 +574,9 @@ func (h *Handler) handleCommandCreateSchedule(userId int, upd tgbotapi.Update) [
 			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(course.Name, course.Id)))
 	}
 
+	keys.InlineKeyboard = append(keys.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("Опціональний курс", OptionalCourseCallbackId)))
+
 	msg.ReplyMarkup = keys
 	return []tgbotapi.MessageConfig{msg}
 }
@@ -572,6 +609,27 @@ func (h *Handler) handleClearScheduleCommand(userId int, upd tgbotapi.Update) []
 	return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Розклад було успішно видалено")}
 }
 
+func (h *Handler) handleLinkCourseCommand(userId int, upt tgbotapi.Update) []tgbotapi.MessageConfig {
+
+	h.actions.SaveUserCurrentState(userId, dto.UserActionDto{Command: commands.LinkOptionalCourseCommand, Action: actions.UserActionChooseCourse})
+
+	req := dto.LinkOptionalCourseToUserRequest{UserId: userId}
+	h.linkOptionalCourseRequests[userId] = req
+
+	courses, _ := h.course.GetOptionalCourses()
+
+	msg := tgbotapi.NewMessage(upt.Message.Chat.ID, "Виберіть курс: ")
+	reply := tgbotapi.NewInlineKeyboardMarkup()
+
+	for _, info := range courses.Courses {
+		reply.InlineKeyboard = append(reply.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(info.Name, info.Id)))
+	}
+
+	msg.ReplyMarkup = reply
+	return []tgbotapi.MessageConfig{msg}
+}
+
 func (h *Handler) handleCommand(userId int, upd tgbotapi.Update) []tgbotapi.MessageConfig {
 	switch upd.Message.Command() {
 	case string(commands.CreateAdditionalScheduleCommand):
@@ -594,7 +652,8 @@ func (h *Handler) handleCommand(userId int, upd tgbotapi.Update) []tgbotapi.Mess
 		return h.handleCancelCommand(userId, upd)
 	case string(commands.ClearScheduleCommand):
 		return h.handleClearScheduleCommand(userId, upd)
-
+	case string(commands.LinkOptionalCourseCommand):
+		return h.handleLinkCourseCommand(userId, upd)
 	default:
 		return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Невідома команда")}
 	}
@@ -605,7 +664,10 @@ func (h *Handler) handleActionInputCourseName(action dto.UserActionDto, userId i
 		req, _ := h.createCourseRequests[userId]
 		req.Name = upd.Message.Text
 		h.createCourseRequests[userId] = req
-		return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Введіть ім'я вчителя")}
+		msg := tgbotapi.NewMessage(upd.Message.Chat.ID, "Виберіть, чи буде курс опціональним")
+		msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("Так"), tgbotapi.NewKeyboardButton("Ні")))
+		return []tgbotapi.MessageConfig{msg}
 	}
 	if action.Command == commands.UpdateCourseCommand {
 		if upd.Message.Text != "Без змін" {
@@ -613,8 +675,10 @@ func (h *Handler) handleActionInputCourseName(action dto.UserActionDto, userId i
 			req.Name = upd.Message.Text
 			h.updateCourseRequests[userId] = req
 		}
-		msg := tgbotapi.NewMessage(upd.Message.Chat.ID, "Введіть ім'я вчителя")
-		msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(tgbotapi.NewKeyboardButtonRow(tgbotapi.NewKeyboardButton("Без змін")))
+		msg := tgbotapi.NewMessage(upd.Message.Chat.ID, "Виберіть, чи буде курс опціональним")
+		msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("Так"), tgbotapi.NewKeyboardButton("Ні")),
+			tgbotapi.NewKeyboardButtonRow(tgbotapi.NewKeyboardButton("Без змін")))
 		return []tgbotapi.MessageConfig{msg}
 	}
 	panic("")
@@ -791,6 +855,59 @@ func (h *Handler) handleActionInputOrder(action dto.UserActionDto, userId int, u
 	return []tgbotapi.MessageConfig{msg}
 }
 
+func (h *Handler) handleActionInputOptionality(action dto.UserActionDto, userId int, upd tgbotapi.Update) []tgbotapi.MessageConfig {
+
+	if action.Command == commands.CreateCourseCommand {
+		if valid := h.validateOptInput(upd.Message.Text, false); !valid {
+			return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Ви ввели невірні значення")}
+		}
+
+		h.actions.SaveUserCurrentState(userId, dto.UserActionDto{Command: action.Command, Action: actions.UserActionInputTeacherName})
+
+		req := h.createCourseRequests[userId]
+
+		convertBool := false
+
+		if upd.Message.Text == "Так" {
+			convertBool = true
+		}
+
+		req.IsOptional = convertBool
+		h.createCourseRequests[userId] = req
+		msg := tgbotapi.NewMessage(upd.Message.Chat.ID,
+			"Введіть ім'я вчителя")
+		msg.ReplyMarkup = tgbotapi.ReplyKeyboardRemove{RemoveKeyboard: true}
+
+		return []tgbotapi.MessageConfig{msg}
+	}
+	if valid := h.validateOptInput(upd.Message.Text, true); !valid {
+		return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Ви ввели невірні значення")}
+	}
+	h.actions.SaveUserCurrentState(userId, dto.UserActionDto{Command: action.Command, Action: actions.UserActionInputTeacherName})
+
+	req := h.updateCourseRequests[userId]
+
+	msg := tgbotapi.NewMessage(upd.Message.Chat.ID,
+		"Введіть ім'я вчителя")
+	msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(tgbotapi.NewKeyboardButtonRow(
+		tgbotapi.NewKeyboardButton("Без змін")))
+
+	if upd.Message.Text == "Без змін" {
+		return []tgbotapi.MessageConfig{msg}
+	}
+
+	convertBool := false
+
+	if upd.Message.Text == "Так" {
+		convertBool = true
+	}
+
+	req.IsOptional = convertBool
+	h.updateCourseRequests[userId] = req
+
+	return []tgbotapi.MessageConfig{msg}
+}
+
 func (h *Handler) validateOrderInput(data string) bool {
 	for orders, _ := range h.cfg.ScheduleSettings.TimeSlotsConfiguration {
 		if fmt.Sprintf("%d", orders) == data {
@@ -800,10 +917,26 @@ func (h *Handler) validateOrderInput(data string) bool {
 	return false
 }
 
+func (h *Handler) validateOptInput(data string, isUpdate bool) bool {
+
+	validValues := []string{"Так", "Ні"}
+
+	if isUpdate {
+		validValues = append(validValues, "Без змін")
+	}
+
+	for _, value := range validValues {
+		if value == data {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *Handler) handleAction(action dto.UserActionDto, userId int, upd tgbotapi.Update) []tgbotapi.MessageConfig {
 	switch action.Action {
 	case actions.UserActionInputCourseName:
-		defer h.actions.SaveUserCurrentState(userId, dto.UserActionDto{Command: action.Command, Action: actions.UserActionInputTeacherName})
+		defer h.actions.SaveUserCurrentState(userId, dto.UserActionDto{Command: action.Command, Action: actions.UserActionSelectOptionality})
 		return h.handleActionInputCourseName(action, userId, upd)
 	case actions.UserActionInputTeacherName:
 		defer h.actions.SaveUserCurrentState(userId, dto.UserActionDto{Command: action.Command, Action: actions.UserActionInputTeacherContact})
@@ -820,6 +953,8 @@ func (h *Handler) handleAction(action dto.UserActionDto, userId int, upd tgbotap
 		return h.handleActionInputWeekOrder(userId, upd)
 	case actions.UserActionInputOrder:
 		return h.handleActionInputOrder(action, userId, upd)
+	case actions.UserActionSelectOptionality:
+		return h.handleActionInputOptionality(action, userId, upd)
 	default:
 		return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Виникла помилка, повторіть спробу пізніше")}
 	}

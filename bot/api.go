@@ -25,20 +25,18 @@ func NewApi(cfg configuration.Configuration) (*Api, error) {
 	return &Api{client: client, cfg: cfg}, nil
 }
 
-func (a *Api) BatchSend(scheduleDto dto.ScheduleDto, startTime time.Time, recipients []int64) {
-	for _, rec := range recipients {
-		msg := tgbotapi.NewMessage(rec, fmt.Sprintf(
-			"Пара № %d, тиждень: %s, %s \n Вчитель: %s \n Контакт: %s \n Посилання на зустріч: %s \n Час зустрічі: %s",
-			scheduleDto.Order,
-			util.ConvertToHumanReadableWeekOrder(scheduleDto.WeekOrder),
-			scheduleDto.CourseInfo.Name,
-			scheduleDto.CourseInfo.TeacherName,
-			scheduleDto.CourseInfo.TeacherContact,
-			scheduleDto.CourseInfo.MeetLink,
-			startTime.Format(time.DateTime)))
-		go a.executeMessage(msg)
-	}
+func (a *Api) SendNotification(scheduleDto dto.ScheduleDto, startTime time.Time, recipient int64) {
 
+	msg := tgbotapi.NewMessage(recipient, fmt.Sprintf(
+		"Пара № %d, тиждень: %s, %s \n Вчитель: %s \n Контакт: %s \n Посилання на зустріч: %s \n Час зустрічі: %s",
+		scheduleDto.Order,
+		util.ConvertToHumanReadableWeekOrder(scheduleDto.WeekOrder),
+		scheduleDto.CourseInfo.Name,
+		scheduleDto.CourseInfo.TeacherName,
+		scheduleDto.CourseInfo.TeacherContact,
+		scheduleDto.CourseInfo.MeetLink,
+		startTime.Format(time.DateTime)))
+	go a.executeMessage(msg)
 }
 
 func (a *Api) StartServe() {

@@ -13,4 +13,5 @@ const (
 	GetScheduleCommonCommand        CommandType = "get_schedule_common"
 	CancelCommand                   CommandType = "cancel"
 	ClearScheduleCommand            CommandType = "clear_schedule"
+	LinkOptionalCourseCommand       CommandType = "link_optional_course"
 )
