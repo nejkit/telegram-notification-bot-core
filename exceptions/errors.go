@@ -3,4 +3,6 @@ package exceptions
 import "errors"
 
 var NotFound = errors.New("NotFound")
-var OptionalCourseNotSelected = errors.New("OptionalCourseNotSelected")
+var InternalError = errors.New("InternalError")
+var AlreadyExists = errors.New("AlreadyExists")
+var OptionalCourseNotSelected = errors.New("O	ptionalCourseNotSelected")

@@ -12,6 +12,8 @@ require (
 
 require (
 	github.com/caarlos0/env v3.5.0+incompatible // indirect
+	github.com/go-redis/redis v6.15.9+incompatible // indirect
+	github.com/redis/go-redis v6.15.9+incompatible // indirect
 	github.com/technoweenie/multipartstreamer v1.0.1 // indirect
 	golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8 // indirect
 )

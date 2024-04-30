@@ -36,3 +36,11 @@ type IChatProvider interface {
 	GetChatByUserId(userId int) (int64, error)
 	SaveChatForUser(userId int, chatId int64) error
 }
+
+type INotificationCacheProvider interface {
+	SaveInfosByNotification(userId int, object dto.NotificationInfoDto) error
+	GetInfoAboutNotification(userId int, order int) (*dto.NotificationInfoDto, error)
+	DeleteNotification(userId int, order int) error
+	SaveLockForCompletedNotification(userId int, order int) error
+	GetInfoAboutNotificationLock(userId int, order int) error
+}

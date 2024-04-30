@@ -16,6 +16,8 @@ type BackgroundService struct {
 	chatProvider    abstractions.IChatProvider
 	cfg             configuration.Configuration
 	handlers        map[int]map[int]<-chan struct{}
+
+	notificationCache abstractions.INotificationCacheProvider
 }
 
 func NewBackgroundService(scheduleService abstractions.IScheduleService, chatProvider abstractions.IChatProvider, cfg configuration.Configuration) *BackgroundService {
@@ -48,13 +50,8 @@ func (b BackgroundService) Run(ctx context.Context, handleFunc HandleFunc) {
 			}
 
 			for _, accountId := range accounts {
-				_, exists := b.handlers[accountId]
 
-				if !exists {
-					b.handlers[accountId] = map[int]<-chan struct{}{}
-				}
-
-				b.doCycle(ctx, schedules, accountId, handleFunc)
+				b.doCycle(ctx, schedules[accountId], accountId, handleFunc)
 			}
 		}
 	}
@@ -62,18 +59,26 @@ func (b BackgroundService) Run(ctx context.Context, handleFunc HandleFunc) {
 
 func (b BackgroundService) doCycle(
 	ctx context.Context,
-	schedules map[int][]dto.ScheduleDto,
+	schedules []dto.ScheduleDto,
 	accountId int,
 	handleFunc HandleFunc) {
-	filteredNotifications := b.filterOverdueNotifications(schedules[accountId])
+	filteredNotifications := b.filterOverdueNotifications(schedules)
 
 	for _, notification := range filteredNotifications {
 
-		_, exists := b.handlers[accountId][notification.Order]
+		notify, err := b.notificationCache.GetInfoAboutNotification(accountId, notification.Order)
 
-		if exists {
+		if err == nil {
 			continue
 		}
+
+		err = b.notificationCache.GetInfoAboutNotificationLock(accountId, notification.Order)
+
+		if err == nil {
+			continue
+		}
+
+		err = b.notificationCache.SaveInfosByNotification(accountId, dto.NotificationInfoDto{})
 
 		b.handlers[accountId][notification.Order] = b.initHandler(ctx, handleFunc, notification, accountId)
 
@@ -115,9 +120,7 @@ func (b BackgroundService) initHandler(
 	args dto.ScheduleDto,
 	accountId int) chan struct{} {
 	ticker := time.NewTicker(time.Second)
-
 	startTime := util.GetMidnightTime().Add(b.cfg.ScheduleSettings.TimeSlotsConfiguration[args.Order].StartTime)
-
 	reminderSlice := append(b.cfg.ScheduleSettings.ReminderIntervals, 0)
 
 	cancelChan := make(chan struct{})
@@ -130,6 +133,29 @@ func (b BackgroundService) initHandler(
 			return
 		}
 
+		notificationDto := dto.NotificationInfoDto{
+			NotificationDate: startTime,
+			ChatId:           chatId,
+			Data:             args,
+			States:           map[int]bool{},
+		}
+
+		for _, interval := range reminderSlice {
+			notificationDto.States[interval] = false
+		}
+
+		err = b.notificationCache.GetInfoAboutNotificationLock(accountId, args.Order)
+
+		if err != nil {
+			return
+		}
+
+		err = b.notificationCache.SaveInfosByNotification(accountId, notificationDto)
+
+		if err != nil {
+			return
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -137,6 +163,8 @@ func (b BackgroundService) initHandler(
 				return
 			case <-ticker.C:
 				actualTime := time.Now()
+
+				notificationInfo := b.notificationCache.GetInfoAboutNotification(accountId)
 
 				for _, rem := range reminderSlice {
 
