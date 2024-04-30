@@ -862,6 +862,8 @@ func (h *Handler) handleActionInputOptionality(action dto.UserActionDto, userId 
 			return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Ви ввели невірні значення")}
 		}
 
+		h.actions.SaveUserCurrentState(userId, dto.UserActionDto{Command: action.Command, Action: actions.UserActionInputTeacherName})
+
 		req := h.createCourseRequests[userId]
 
 		convertBool := false
@@ -875,11 +877,13 @@ func (h *Handler) handleActionInputOptionality(action dto.UserActionDto, userId 
 		msg := tgbotapi.NewMessage(upd.Message.Chat.ID,
 			"Введіть ім'я вчителя")
 		msg.ReplyMarkup = tgbotapi.ReplyKeyboardRemove{RemoveKeyboard: true}
+
 		return []tgbotapi.MessageConfig{msg}
 	}
 	if valid := h.validateOptInput(upd.Message.Text, true); !valid {
 		return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Ви ввели невірні значення")}
 	}
+	h.actions.SaveUserCurrentState(userId, dto.UserActionDto{Command: action.Command, Action: actions.UserActionInputTeacherName})
 
 	req := h.updateCourseRequests[userId]
 
@@ -950,7 +954,6 @@ func (h *Handler) handleAction(action dto.UserActionDto, userId int, upd tgbotap
 	case actions.UserActionInputOrder:
 		return h.handleActionInputOrder(action, userId, upd)
 	case actions.UserActionSelectOptionality:
-		defer h.actions.SaveUserCurrentState(userId, dto.UserActionDto{Command: action.Command, Action: actions.UserActionInputTeacherName})
 		return h.handleActionInputOptionality(action, userId, upd)
 	default:
 		return []tgbotapi.MessageConfig{tgbotapi.NewMessage(upd.Message.Chat.ID, "Виникла помилка, повторіть спробу пізніше")}

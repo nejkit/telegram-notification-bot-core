@@ -140,11 +140,11 @@ func (b BackgroundService) initHandler(
 
 				for _, rem := range reminderSlice {
 
-					if int(startTime.Sub(actualTime).Minutes()) < rem {
+					if startTime.Minute()-actualTime.Minute() < rem {
 						reminderSlice = reminderSlice[1:]
 					}
 
-					if int(startTime.Sub(actualTime).Minutes()) == rem {
+					if startTime.Minute()-actualTime.Minute() == rem {
 						reminderSlice = reminderSlice[1:]
 
 						handleFunc(args, startTime, chatId)
